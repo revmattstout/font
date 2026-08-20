@@ -6,8 +6,8 @@ export const TEMPLATE_COLS = 8;
 // "print at 100%" produces a physically correct 8.5x11in sheet. 150 DPI
 // keeps the file crisp without being huge.
 const PPI = 150;
-const PAGE_WIDTH_IN = 8.5;
-const PAGE_HEIGHT_IN = 11;
+export const PAGE_WIDTH_IN = 8.5;
+export const PAGE_HEIGHT_IN = 11;
 export const PAGE_WIDTH = Math.round(PAGE_WIDTH_IN * PPI);
 export const PAGE_HEIGHT = Math.round(PAGE_HEIGHT_IN * PPI);
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { computeTemplateLayout, renderTemplate } from "../lib/template";
+import { computeTemplateLayout, PAGE_HEIGHT_IN, PAGE_WIDTH_IN, renderTemplate } from "../lib/template";
 
 export default function TemplateGenerator() {
   const previewRef = useRef<HTMLDivElement>(null);
@@ -18,31 +18,30 @@ export default function TemplateGenerator() {
     }
   }, []);
 
-  function handleDownload() {
+  async function handleDownload() {
     const canvas = canvasHolder.current;
     if (!canvas) return;
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const href = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = href;
-      a.download = "handwriting-font-template.png";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(href);
-    }, "image/png");
+    // Loaded on demand — jsPDF's default bundle pulls in an HTML-rendering
+    // plugin (html2canvas/dompurify) we don't use, so keep it out of the
+    // main bundle.
+    const { jsPDF } = await import("jspdf");
+    // A PDF sized to an exact 8.5x11in page prints reliably at "actual
+    // size" everywhere — unlike a plain PNG, whose printed size depends on
+    // whatever DPI the OS/print dialog/photo app guesses for it.
+    const pdf = new jsPDF({ unit: "in", format: "letter" });
+    pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, PAGE_WIDTH_IN, PAGE_HEIGHT_IN);
+    pdf.save("handwriting-font-template.pdf");
   }
 
   return (
     <div className="panel">
       <h3>1. Download &amp; print the template</h3>
       <p className="hint">
-        Print at 100% scale (no "fit to page"), fill in each box by hand with a dark pen, then scan or
-        photograph the whole sheet straight-on. Keep the three black squares fully visible.
+        Print at actual size (100% scale, no "fit to page"), fill in each box by hand with a dark pen, then
+        scan or photograph the whole sheet straight-on. Keep the three black squares fully visible.
       </p>
       <button className="btn-primary" onClick={handleDownload}>
-        Download template (PNG)
+        Download template (PDF)
       </button>
       <div ref={previewRef} className="template-preview" />
     </div>
