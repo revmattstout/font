@@ -38,28 +38,30 @@ interface TraceData {
 // Erases the printed box border and guide lines from an ALREADY-BINARIZED
 // cell image — by shape, not by position or darkness.
 //
-// Two earlier approaches both broke down: whitening guide pixels only when
-// they weren't dark enough to be ink assumed the guide always prints
-// lighter than real ink, which plenty of consumer printers violate (light
-// grays dither into a dot pattern that reads as solid dark once scanned).
-// Unconditionally erasing a fixed-width band at each guide row fixed that,
-// but breaks any ink that runs close to *tangent* to a guide line (the top
-// of an "O" sitting right at the cap-height guide, say) — the band removes
-// a long arc of the curve there, not just a short crossing, because the
-// curve barely rises within that band's width. No fixed gap-closing radius
-// can bridge that without also being large enough to eat real small
-// counters elsewhere.
+// Earlier approaches broke down in different ways. Whitening guide pixels
+// only when they weren't dark enough to be ink assumed the guide always
+// prints lighter than real ink, which plenty of consumer printers violate
+// (light grays dither into a dot pattern that reads as solid dark once
+// scanned). Unconditionally erasing a fixed-width band at every guide row
+// fixed that, but breaks ink running close to *tangent* to a guide line
+// (the top of an "O" sitting right at the cap-height guide, say) — the
+// band removes a long arc there, not just a short crossing. Checking
+// run-length across that whole band helped the tangent case, but the band
+// itself was still wide enough (to tolerate calibration slop) that it
+// could misfire on genuinely thin pen strokes.
 //
-// The actual distinguishing feature between "this is the guide line" and
-// "this is a real letter" isn't color or position — it's thickness. A
-// printed guide is geometrically thin wherever it is; real ink (per the
-// template's own "write in dark ink" instruction) is many times thicker.
-// So for each guide row, only pixels belonging to a short contiguous run
-// of ink THROUGH that row get erased — the whole run, so no gap is left to
-// bridge in the first place. A run longer than `maxRunLength` is real ink
-// and is left completely untouched, no matter how dark the guide itself
-// printed.
-export function removeThinGuideLines(imageData: ImageData, guideRows: number[], maxRunLength = 7): void {
+// `guideMask` fixes the position question outright: it's rendered from the
+// exact same drawing code as the printed template (see
+// computeCellGuideMask), so it's pixel-perfect ground truth for exactly
+// which pixels are guide artwork — no band width to tune, no calibration
+// slop to absorb. Within that precise footprint, a pixel is only erased if
+// it belongs to a short run of ink (the guide itself, however dark it
+// printed); a longer run — real ink, at any angle — is left alone. Because
+// the footprint is now just the guide's own few-pixel width instead of an
+// approximate band, both failure modes shrink: less real ink is ever a
+// candidate for erasure, and curves lose only a short, closeInkGaps-sized
+// arc even where they run tangent to a guide.
+export function removeThinGuideLines(imageData: ImageData, guideMask: Uint8Array, maxRunLength = 6): void {
   const { width, height, data } = imageData;
   const isInk = (x: number, y: number) => data[(y * width + x) * 4] === 0;
   const whiten = (x: number, y: number) => {
@@ -91,24 +93,19 @@ export function removeThinGuideLines(imageData: ImageData, guideRows: number[], 
     }
   }
 
-  // Horizontal guide lines (including the top/bottom box border): scan a
-  // few rows around each nominal position — the printed/scanned line may
-  // land a pixel or two off — and clear whichever runs are thin there.
-  const rows = [...guideRows, 0, height - 1];
-  for (const cy of rows) {
-    for (let dy = -1; dy <= 1; dy++) {
-      const y = cy + dy;
-      if (y < 0 || y >= height) continue;
-      for (let x = 0; x < width; x++) clearShortVerticalRun(x, y);
-    }
-  }
-
-  // Left/right box border, same idea but horizontal runs.
-  for (const cx of [0, width - 1]) {
-    for (let dx = -1; dx <= 1; dx++) {
-      const x = cx + dx;
-      if (x < 0 || x >= width) continue;
-      for (let y = 0; y < height; y++) clearShortHorizontalRun(x, y);
+  // Every guide element we draw is either a horizontal line (border
+  // top/bottom, baseline, the dashed reference lines) or a vertical one
+  // (border left/right) — so pixels near the cell's left/right edge get
+  // checked for a short horizontal run, everything else for a short
+  // vertical one.
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!guideMask[y * width + x]) continue;
+      if (x <= 2 || x >= width - 3) {
+        clearShortHorizontalRun(x, y);
+      } else {
+        clearShortVerticalRun(x, y);
+      }
     }
   }
 

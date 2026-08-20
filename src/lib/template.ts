@@ -24,17 +24,6 @@ const REG_MARK_SIZE = Math.round(0.09 * PPI);
 // with one uniform scale factor (no distortion).
 const CELL_ASPECT = CELL.width / CELL.height;
 
-// Vertical position (as a fraction of cell height) of each printed guide
-// line. Exported so the scan/trace pipeline can blank out these exact rows
-// before tracing — the guides can then be printed dark and legible without
-// any risk of being mistaken for ink.
-export const GUIDE_LINE_FRACTIONS = [
-  CELL.capHeightY / CELL.height,
-  CELL.xHeightY / CELL.height,
-  CELL.baselineY / CELL.height,
-  CELL.descenderY / CELL.height,
-];
-
 export interface Point {
   x: number;
   y: number;
@@ -136,31 +125,36 @@ export function renderTemplate(layout: TemplateLayout): HTMLCanvasElement {
     const pos = layout.cellPos.get(g.char)!;
     ctx.save();
     ctx.translate(pos.x, pos.y);
-
-    ctx.strokeStyle = "#9e9e9e";
-    ctx.lineWidth = 1.25;
-    ctx.strokeRect(0.5, 0.5, cw - 1, ch - 1);
-
-    ctx.setLineDash([2, 2]);
-    ctx.strokeStyle = "#b8b8b8";
-    hline(ctx, cw, (CELL.xHeightY / CELL.height) * ch);
-    hline(ctx, cw, (CELL.capHeightY / CELL.height) * ch);
-    hline(ctx, cw, (CELL.descenderY / CELL.height) * ch);
-    ctx.setLineDash([]);
-
-    ctx.strokeStyle = "#9b9b9b";
-    ctx.lineWidth = 1.5;
-    hline(ctx, cw, (CELL.baselineY / CELL.height) * ch);
-    ctx.lineWidth = 1.25;
-
+    drawCellGuideLines(ctx, cw, ch);
     ctx.fillStyle = "#a3a3a3";
     ctx.font = "8px sans-serif";
     ctx.fillText(g.name, 3, ch - 3);
-
     ctx.restore();
   }
 
   return canvas;
+}
+
+// Draws the border + reference guide lines for one cell (assumes ctx is
+// already translated to the cell's top-left corner). Shared between the
+// visible printed template and computeCellGuideMask below, so the mask is
+// guaranteed to line up exactly with what actually gets printed.
+function drawCellGuideLines(ctx: CanvasRenderingContext2D, cw: number, ch: number) {
+  ctx.strokeStyle = "#9e9e9e";
+  ctx.lineWidth = 1.25;
+  ctx.strokeRect(0.5, 0.5, cw - 1, ch - 1);
+
+  ctx.setLineDash([2, 2]);
+  ctx.strokeStyle = "#b8b8b8";
+  hline(ctx, cw, (CELL.xHeightY / CELL.height) * ch);
+  hline(ctx, cw, (CELL.capHeightY / CELL.height) * ch);
+  hline(ctx, cw, (CELL.descenderY / CELL.height) * ch);
+  ctx.setLineDash([]);
+
+  ctx.strokeStyle = "#9b9b9b";
+  ctx.lineWidth = 1.5;
+  hline(ctx, cw, (CELL.baselineY / CELL.height) * ch);
+  ctx.lineWidth = 1.25;
 }
 
 function hline(ctx: CanvasRenderingContext2D, width: number, y: number) {
@@ -168,4 +162,51 @@ function hline(ctx: CanvasRenderingContext2D, width: number, y: number) {
   ctx.moveTo(0, y);
   ctx.lineTo(width, y);
   ctx.stroke();
+}
+
+// Renders exactly the guide-line/border artwork for one cell (same drawing
+// code as the printed template, so it's pixel-perfect ground truth rather
+// than an inferred position) and returns a coverage mask: 1 where a guide
+// pixel was drawn (antialiasing included, then dilated by a pixel for
+// margin), 0 elsewhere. The scan/trace pipeline uses this to know exactly
+// which pixels are "guide," independent of how dark that guide happens to
+// print or scan.
+export function computeCellGuideMask(cw: number, ch: number): Uint8Array {
+  const canvas = document.createElement("canvas");
+  canvas.width = cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, cw, ch);
+  ctx.strokeStyle = "#000000";
+  drawCellGuideLines(ctx, cw, ch);
+
+  const { data } = ctx.getImageData(0, 0, cw, ch);
+  const covered = new Uint8Array(cw * ch);
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    covered[p] = data[i] < 250 ? 1 : 0; // catches antialiased edges too
+  }
+
+  // Dilate by 1px for a small margin against print bleed / sub-pixel
+  // calibration jitter.
+  const mask = new Uint8Array(cw * ch);
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      let hit = false;
+      for (let dy = -1; dy <= 1 && !hit; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= ch) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= cw) continue;
+          if (covered[yy * cw + xx]) {
+            hit = true;
+            break;
+          }
+        }
+      }
+      mask[y * cw + x] = hit ? 1 : 0;
+    }
+  }
+  return mask;
 }

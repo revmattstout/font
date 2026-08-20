@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { CELL } from "../glyphSet";
-import { computeTemplateLayout, GUIDE_LINE_FRACTIONS, type Point } from "../lib/template";
+import { computeCellGuideMask, computeTemplateLayout, type Point } from "../lib/template";
 import { solveHomography, warpImagePerspective } from "../lib/homography";
 import { adaptiveBinarize, closeInkGaps, removeThinGuideLines, traceCellToRawPath } from "../lib/trace";
 import { scalePath } from "../lib/rawPath";
@@ -88,14 +88,14 @@ export default function TemplateUpload() {
       const minInkPixels = MIN_INK_FRACTION * cw * ch;
       const scaleX = CELL.width / cw;
       const scaleY = CELL.height / ch;
-      const guideRows = GUIDE_LINE_FRACTIONS.map((f) => Math.round(f * ch));
+      const guideMask = computeCellGuideMask(cw, ch);
 
       let captured = 0;
       for (const g of layout.glyphs) {
         const pos = layout.cellPos.get(g.char)!;
         const raw = ctx.getImageData(pos.x, pos.y, cw, ch);
         const binarized = adaptiveBinarize(raw);
-        removeThinGuideLines(binarized, guideRows);
+        removeThinGuideLines(binarized, guideMask);
         const bw = closeInkGaps(binarized);
 
         let inkPixels = 0;
