@@ -34,6 +34,48 @@ interface TraceData {
   layers: TracePath[][];
 }
 
+// Erases (whitens) the printed box border and the known guide-line rows
+// from a cell's pixel data before it's binarized/traced. This lets the
+// template print those guides dark and legible (see template.ts) without
+// any risk of them being picked up as handwriting ink.
+export function maskGuideArtifacts(
+  imageData: ImageData,
+  guideLineFractions: number[],
+  borderPx = 4,
+  bandPx = 4
+): void {
+  const { width, height, data } = imageData;
+  const whiten = (x: number, y: number) => {
+    const i = (y * width + x) * 4;
+    data[i] = 255;
+    data[i + 1] = 255;
+    data[i + 2] = 255;
+    data[i + 3] = 255;
+  };
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < borderPx; x++) {
+      whiten(x, y);
+      whiten(width - 1 - x, y);
+    }
+  }
+  for (let x = 0; x < width; x++) {
+    for (let y = 0; y < borderPx; y++) {
+      whiten(x, y);
+      whiten(x, height - 1 - y);
+    }
+  }
+
+  for (const frac of guideLineFractions) {
+    const cy = Math.round(frac * height);
+    for (let dy = -bandPx; dy <= bandPx; dy++) {
+      const y = cy + dy;
+      if (y < 0 || y >= height) continue;
+      for (let x = 0; x < width; x++) whiten(x, y);
+    }
+  }
+}
+
 // Converts a scanned/photographed cell's pixels into pure black-on-white,
 // so the tracer only has one shape (the ink) to deal with.
 export function binarize(imageData: ImageData, threshold = 140): ImageData {

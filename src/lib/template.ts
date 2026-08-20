@@ -24,6 +24,17 @@ const REG_MARK_SIZE = Math.round(0.09 * PPI);
 // with one uniform scale factor (no distortion).
 const CELL_ASPECT = CELL.width / CELL.height;
 
+// Vertical position (as a fraction of cell height) of each printed guide
+// line. Exported so the scan/trace pipeline can blank out these exact rows
+// before tracing — the guides can then be printed dark and legible without
+// any risk of being mistaken for ink.
+export const GUIDE_LINE_FRACTIONS = [
+  CELL.capHeightY / CELL.height,
+  CELL.xHeightY / CELL.height,
+  CELL.baselineY / CELL.height,
+  CELL.descenderY / CELL.height,
+];
+
 export interface Point {
   x: number;
   y: number;
@@ -125,21 +136,21 @@ export function renderTemplate(layout: TemplateLayout): HTMLCanvasElement {
     ctx.save();
     ctx.translate(pos.x, pos.y);
 
-    ctx.strokeStyle = "#d8d8d8";
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#8a8a8a";
+    ctx.lineWidth = 1.25;
     ctx.strokeRect(0.5, 0.5, cw - 1, ch - 1);
 
     ctx.setLineDash([2, 2]);
-    ctx.strokeStyle = "#dcdce6";
+    ctx.strokeStyle = "#aaaaaa";
     hline(ctx, cw, (CELL.xHeightY / CELL.height) * ch);
     hline(ctx, cw, (CELL.capHeightY / CELL.height) * ch);
     hline(ctx, cw, (CELL.descenderY / CELL.height) * ch);
     ctx.setLineDash([]);
 
-    ctx.strokeStyle = "#c7c7d6";
+    ctx.strokeStyle = "#555555";
     hline(ctx, cw, (CELL.baselineY / CELL.height) * ch);
 
-    ctx.fillStyle = "#d5d5d5";
+    ctx.fillStyle = "#999999";
     ctx.font = "8px sans-serif";
     ctx.fillText(g.name, 3, ch - 3);
 
