@@ -35,72 +35,90 @@ interface TraceData {
   layers: TracePath[][];
 }
 
-// Erases the printed box border and guide lines from a cell's pixel data
-// before it's binarized/traced — but only where they're actually just the
-// printed guide, not where real ink happens to cross them. A pixel is only
-// whitened if it ISN'T dark enough to plausibly be pen ink, so a letter's
-// stem crossing the baseline (or touching the box edge) survives intact.
-// This is why the guides can be printed clearly visible (see template.ts)
-// without contaminating the trace: darker-than-`inkLuminance` pixels are
-// always left alone, guide-gray pixels (and any scan/print artifacts near
-// them) are cleaned up.
+// Erases the printed box border and guide lines from an ALREADY-BINARIZED
+// cell image — by shape, not by position or darkness.
 //
-// The band/border widths are generous on purpose: a real photo's guide
-// lines rarely land exactly where the ideal per-cell math says they
-// should, since the calibration is a 3-point affine fit to manually
-// clicked registration marks (a few pixels of click imprecision is
-// normal). Too narrow a band lets a sliver of guide line through, which
-// the adaptive threshold — far more sensitive to our light-gray guide
-// color than a flat global threshold was — picks up as ink, and the
-// gap-closing pass then thickens into a visible bar. Widening the band
-// costs nothing for real ink, which stays protected by the darkness check
-// regardless of how wide the scanned band is.
-export function maskGuideArtifacts(
-  imageData: ImageData,
-  guideLineFractions: number[],
-  borderPx = 10,
-  bandPx = 12,
-  inkLuminance = 115
-): void {
+// Two earlier approaches both broke down: whitening guide pixels only when
+// they weren't dark enough to be ink assumed the guide always prints
+// lighter than real ink, which plenty of consumer printers violate (light
+// grays dither into a dot pattern that reads as solid dark once scanned).
+// Unconditionally erasing a fixed-width band at each guide row fixed that,
+// but breaks any ink that runs close to *tangent* to a guide line (the top
+// of an "O" sitting right at the cap-height guide, say) — the band removes
+// a long arc of the curve there, not just a short crossing, because the
+// curve barely rises within that band's width. No fixed gap-closing radius
+// can bridge that without also being large enough to eat real small
+// counters elsewhere.
+//
+// The actual distinguishing feature between "this is the guide line" and
+// "this is a real letter" isn't color or position — it's thickness. A
+// printed guide is geometrically thin wherever it is; real ink (per the
+// template's own "write in dark ink" instruction) is many times thicker.
+// So for each guide row, only pixels belonging to a short contiguous run
+// of ink THROUGH that row get erased — the whole run, so no gap is left to
+// bridge in the first place. A run longer than `maxRunLength` is real ink
+// and is left completely untouched, no matter how dark the guide itself
+// printed.
+export function removeThinGuideLines(imageData: ImageData, guideRows: number[], maxRunLength = 7): void {
   const { width, height, data } = imageData;
-  const maybeWhiten = (x: number, y: number) => {
+  const isInk = (x: number, y: number) => data[(y * width + x) * 4] === 0;
+  const whiten = (x: number, y: number) => {
     const i = (y * width + x) * 4;
-    const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-    if (lum < inkLuminance) return; // dark enough to be real ink — leave it
     data[i] = 255;
     data[i + 1] = 255;
     data[i + 2] = 255;
     data[i + 3] = 255;
   };
 
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < borderPx; x++) {
-      maybeWhiten(x, y);
-      maybeWhiten(width - 1 - x, y);
+  function clearShortVerticalRun(x: number, y: number) {
+    if (!isInk(x, y)) return;
+    let top = y;
+    let bottom = y;
+    while (top > 0 && isInk(x, top - 1)) top--;
+    while (bottom < height - 1 && isInk(x, bottom + 1)) bottom++;
+    if (bottom - top + 1 <= maxRunLength) {
+      for (let yy = top; yy <= bottom; yy++) whiten(x, yy);
     }
   }
-  for (let x = 0; x < width; x++) {
-    for (let y = 0; y < borderPx; y++) {
-      maybeWhiten(x, y);
-      maybeWhiten(x, height - 1 - y);
+  function clearShortHorizontalRun(x: number, y: number) {
+    if (!isInk(x, y)) return;
+    let left = x;
+    let right = x;
+    while (left > 0 && isInk(left - 1, y)) left--;
+    while (right < width - 1 && isInk(right + 1, y)) right++;
+    if (right - left + 1 <= maxRunLength) {
+      for (let xx = left; xx <= right; xx++) whiten(xx, y);
     }
   }
 
-  for (const frac of guideLineFractions) {
-    const cy = Math.round(frac * height);
-    for (let dy = -bandPx; dy <= bandPx; dy++) {
+  // Horizontal guide lines (including the top/bottom box border): scan a
+  // few rows around each nominal position — the printed/scanned line may
+  // land a pixel or two off — and clear whichever runs are thin there.
+  const rows = [...guideRows, 0, height - 1];
+  for (const cy of rows) {
+    for (let dy = -1; dy <= 1; dy++) {
       const y = cy + dy;
       if (y < 0 || y >= height) continue;
-      for (let x = 0; x < width; x++) maybeWhiten(x, y);
+      for (let x = 0; x < width; x++) clearShortVerticalRun(x, y);
+    }
+  }
+
+  // Left/right box border, same idea but horizontal runs.
+  for (const cx of [0, width - 1]) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const x = cx + dx;
+      if (x < 0 || x >= width) continue;
+      for (let y = 0; y < height; y++) clearShortHorizontalRun(x, y);
     }
   }
 
   // The small reference label (glyph name) printed in the bottom-left
-  // corner of every cell — same deal, whiten unless it's genuinely dark.
+  // corner of every cell — nobody writes there, so it's safe to always
+  // erase the whole area outright regardless of shape.
   const labelY0 = Math.round(height * 0.84);
   const labelX1 = Math.round(width * 0.6);
   for (let y = labelY0; y < height; y++) {
-    for (let x = 0; x < labelX1; x++) maybeWhiten(x, y);
+    for (let x = 0; x < labelX1; x++) whiten(x, y);
   }
 }
 
