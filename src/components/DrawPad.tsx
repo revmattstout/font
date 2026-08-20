@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import opentype from "opentype.js";
 import { CELL } from "../glyphSet";
-import { strokeOutlinePoints, strokesToPath, type Stroke, type StrokePoint } from "../lib/strokesToPath";
+import { mergeStrokesIntoPath, strokeOutlinePoints, type Stroke, type StrokePoint } from "../lib/strokesToPath";
 import type { RawPath } from "../lib/rawPath";
-import { clonePath } from "../lib/rawPath";
 
 interface DrawPadProps {
   char: string;
@@ -155,13 +154,7 @@ export default function DrawPad({ char, label, existingPath, onSave, onDelete, o
       onClose();
       return;
     }
-    const drawnPath = strokesToPath(strokes);
-    let finalPath = drawnPath;
-    if (existingPath && existingPath.commands.length > 0) {
-      finalPath = clonePath(existingPath);
-      finalPath.commands = [...finalPath.commands, ...drawnPath.commands];
-    }
-    onSave(finalPath);
+    onSave(mergeStrokesIntoPath(existingPath, strokes));
   }
 
   function handleDelete() {

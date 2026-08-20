@@ -13,6 +13,7 @@
     "imagetracerjs": "^1.2.6",
     "opentype.js": "^2.0.0",
     "perfect-freehand": "^1.2.3",
+    "polygon-clipping": "^0.15.7",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
