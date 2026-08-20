@@ -2,7 +2,7 @@ import React, { useRef, useState } from "react";
 import { CELL } from "../glyphSet";
 import { computeTemplateLayout, GUIDE_LINE_FRACTIONS, type Point } from "../lib/template";
 import { solveAffine, warpImage } from "../lib/affine";
-import { binarize, maskGuideArtifacts, traceCellToRawPath } from "../lib/trace";
+import { adaptiveBinarize, closeInkGaps, maskGuideArtifacts, traceCellToRawPath } from "../lib/trace";
 import { scalePath } from "../lib/rawPath";
 import { useGlyphStore } from "../state/GlyphStore";
 
@@ -80,7 +80,7 @@ export default function TemplateUpload() {
         const pos = layout.cellPos.get(g.char)!;
         const raw = ctx.getImageData(pos.x, pos.y, cw, ch);
         maskGuideArtifacts(raw, GUIDE_LINE_FRACTIONS);
-        const bw = binarize(raw);
+        const bw = closeInkGaps(adaptiveBinarize(raw));
 
         let inkPixels = 0;
         for (let i = 0; i < bw.data.length; i += 4) {
