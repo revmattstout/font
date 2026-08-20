@@ -34,19 +34,27 @@ interface TraceData {
   layers: TracePath[][];
 }
 
-// Erases (whitens) the printed box border and the known guide-line rows
-// from a cell's pixel data before it's binarized/traced. This lets the
-// template print those guides dark and legible (see template.ts) without
-// any risk of them being picked up as handwriting ink.
+// Erases the printed box border and guide lines from a cell's pixel data
+// before it's binarized/traced — but only where they're actually just the
+// printed guide, not where real ink happens to cross them. A pixel is only
+// whitened if it ISN'T dark enough to plausibly be pen ink, so a letter's
+// stem crossing the baseline (or touching the box edge) survives intact.
+// This is why the guides can be printed clearly visible (see template.ts)
+// without contaminating the trace: darker-than-`inkLuminance` pixels are
+// always left alone, guide-gray pixels (and any scan/print artifacts near
+// them) are cleaned up.
 export function maskGuideArtifacts(
   imageData: ImageData,
   guideLineFractions: number[],
   borderPx = 4,
-  bandPx = 4
+  bandPx = 4,
+  inkLuminance = 115
 ): void {
   const { width, height, data } = imageData;
-  const whiten = (x: number, y: number) => {
+  const maybeWhiten = (x: number, y: number) => {
     const i = (y * width + x) * 4;
+    const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    if (lum < inkLuminance) return; // dark enough to be real ink — leave it
     data[i] = 255;
     data[i + 1] = 255;
     data[i + 2] = 255;
@@ -55,14 +63,14 @@ export function maskGuideArtifacts(
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < borderPx; x++) {
-      whiten(x, y);
-      whiten(width - 1 - x, y);
+      maybeWhiten(x, y);
+      maybeWhiten(width - 1 - x, y);
     }
   }
   for (let x = 0; x < width; x++) {
     for (let y = 0; y < borderPx; y++) {
-      whiten(x, y);
-      whiten(x, height - 1 - y);
+      maybeWhiten(x, y);
+      maybeWhiten(x, height - 1 - y);
     }
   }
 
@@ -71,7 +79,7 @@ export function maskGuideArtifacts(
     for (let dy = -bandPx; dy <= bandPx; dy++) {
       const y = cy + dy;
       if (y < 0 || y >= height) continue;
-      for (let x = 0; x < width; x++) whiten(x, y);
+      for (let x = 0; x < width; x++) maybeWhiten(x, y);
     }
   }
 }

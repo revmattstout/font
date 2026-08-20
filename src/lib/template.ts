@@ -136,21 +136,23 @@ export function renderTemplate(layout: TemplateLayout): HTMLCanvasElement {
     ctx.save();
     ctx.translate(pos.x, pos.y);
 
-    ctx.strokeStyle = "#8a8a8a";
+    ctx.strokeStyle = "#9e9e9e";
     ctx.lineWidth = 1.25;
     ctx.strokeRect(0.5, 0.5, cw - 1, ch - 1);
 
     ctx.setLineDash([2, 2]);
-    ctx.strokeStyle = "#aaaaaa";
+    ctx.strokeStyle = "#b8b8b8";
     hline(ctx, cw, (CELL.xHeightY / CELL.height) * ch);
     hline(ctx, cw, (CELL.capHeightY / CELL.height) * ch);
     hline(ctx, cw, (CELL.descenderY / CELL.height) * ch);
     ctx.setLineDash([]);
 
-    ctx.strokeStyle = "#555555";
+    ctx.strokeStyle = "#9b9b9b";
+    ctx.lineWidth = 1.5;
     hline(ctx, cw, (CELL.baselineY / CELL.height) * ch);
+    ctx.lineWidth = 1.25;
 
-    ctx.fillStyle = "#999999";
+    ctx.fillStyle = "#a3a3a3";
     ctx.font = "8px sans-serif";
     ctx.fillText(g.name, 3, ch - 3);
 
