@@ -1,12 +1,15 @@
 import React, { useRef, useState } from "react";
 import { CELL } from "../glyphSet";
 import { computeTemplateLayout, GUIDE_LINE_FRACTIONS, type Point } from "../lib/template";
-import { solveAffine, warpImage } from "../lib/affine";
+import { solveHomography, warpImagePerspective } from "../lib/homography";
 import { adaptiveBinarize, closeInkGaps, maskGuideArtifacts, traceCellToRawPath } from "../lib/trace";
 import { scalePath } from "../lib/rawPath";
 import { useGlyphStore } from "../state/GlyphStore";
 
-const POINT_LABELS = ["top-left square", "top-right square", "bottom-left square"];
+// Clockwise from top-left, matching the four registration squares printed
+// on the template.
+const POINT_LABELS = ["top-left square", "top-right square", "bottom-right square", "bottom-left square"];
+const NUM_POINTS = POINT_LABELS.length;
 // Fraction of a cell's pixel area that must be ink-dark before it counts as
 // "filled in", rather than a fixed pixel count — keeps this correct however
 // large or small the printed template's cells end up being.
@@ -41,7 +44,7 @@ export default function TemplateUpload() {
   }
 
   function handleImageClick(e: React.MouseEvent<HTMLImageElement>) {
-    if (points.length >= 3 || !imageEl) return;
+    if (points.length >= NUM_POINTS || !imageEl) return;
     const el = imgDisplayRef.current!;
     const rect = el.getBoundingClientRect();
     const scaleX = imageEl.naturalWidth / rect.width;
@@ -58,16 +61,27 @@ export default function TemplateUpload() {
   }
 
   async function processImage() {
-    if (!imageEl || points.length !== 3) return;
+    if (!imageEl || points.length !== NUM_POINTS) return;
     setProcessing(true);
     setResultMsg(null);
     try {
       const layout = computeTemplateLayout();
-      const matrix = solveAffine(
-        [points[0], points[1], points[2]],
-        [layout.regMarks.tl, layout.regMarks.tr, layout.regMarks.bl]
+      // Maps ideal template coordinates to where that content actually is
+      // in the photo — a full perspective fit (not just affine), so it
+      // corrects real camera "keystone" distortion from a photo that
+      // wasn't shot perfectly perpendicular to the page.
+      const homography = solveHomography(
+        [layout.regMarks.tl, layout.regMarks.tr, layout.regMarks.br, layout.regMarks.bl],
+        [points[0], points[1], points[2], points[3]]
       );
-      const warped = warpImage(imageEl, matrix, layout.canvasWidth, layout.canvasHeight);
+      const warped = warpImagePerspective(
+        imageEl,
+        imageEl.naturalWidth,
+        imageEl.naturalHeight,
+        homography,
+        layout.canvasWidth,
+        layout.canvasHeight
+      );
       const ctx = warped.getContext("2d")!;
 
       const { width: cw, height: ch } = layout.cellSize;
@@ -123,8 +137,8 @@ export default function TemplateUpload() {
       {stage !== "upload" && imageEl && (
         <>
           <p className="hint">
-            Click the three black registration squares in order: <b>{POINT_LABELS[points.length] ?? "done"}</b>
-            {points.length < 3 ? "." : " — ready to process."}
+            Click the four black registration squares in order: <b>{POINT_LABELS[points.length] ?? "done"}</b>
+            {points.length < NUM_POINTS ? "." : " — ready to process."}
           </p>
           <div className="calibrate-wrap">
             <img
@@ -153,7 +167,7 @@ export default function TemplateUpload() {
             </button>
             <button onClick={startOver}>Choose a different photo</button>
             <div style={{ flex: 1 }} />
-            <button className="btn-primary" onClick={processImage} disabled={points.length !== 3 || processing}>
+            <button className="btn-primary" onClick={processImage} disabled={points.length !== NUM_POINTS || processing}>
               {processing ? "Processing…" : "Process scan"}
             </button>
           </div>

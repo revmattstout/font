@@ -55,7 +55,7 @@ export interface TemplateLayout {
   cellSize: CellSize;
   glyphs: GlyphDef[];
   cellPos: Map<string, Point>; // top-left of each glyph's cell, template pixel space
-  regMarks: { tl: Point; tr: Point; bl: Point };
+  regMarks: { tl: Point; tr: Point; br: Point; bl: Point };
 }
 
 export function computeTemplateLayout(glyphs: GlyphDef[] = GLYPH_SET): TemplateLayout {
@@ -98,6 +98,7 @@ export function computeTemplateLayout(glyphs: GlyphDef[] = GLYPH_SET): TemplateL
     regMarks: {
       tl: { x: gridOriginX - REG_MARK_OFFSET, y: gridOriginY - REG_MARK_OFFSET },
       tr: { x: gridOriginX + gridWidth + REG_MARK_OFFSET, y: gridOriginY - REG_MARK_OFFSET },
+      br: { x: gridOriginX + gridWidth + REG_MARK_OFFSET, y: gridOriginY + gridHeight + REG_MARK_OFFSET },
       bl: { x: gridOriginX - REG_MARK_OFFSET, y: gridOriginY + gridHeight + REG_MARK_OFFSET },
     },
   };
@@ -120,14 +121,14 @@ export function renderTemplate(layout: TemplateLayout): HTMLCanvasElement {
   ctx.fillStyle = "#444444";
   const instructions = [
     "Print at 100% scale (do not “fit to page”). Write one character per box in dark ink,",
-    "staying inside the box. Keep the three black squares fully visible — they're used to align",
+    "staying inside the box. Keep all four black squares fully visible — they're used to align",
     "your scan/photo. Then scan or photograph the whole page straight-on in good, even light.",
   ];
   instructions.forEach((line, i) => ctx.fillText(line, PAGE_MARGIN, PAGE_MARGIN + 44 + i * 15));
 
   // Registration marks
   ctx.fillStyle = "#000000";
-  for (const mark of [layout.regMarks.tl, layout.regMarks.tr, layout.regMarks.bl]) {
+  for (const mark of [layout.regMarks.tl, layout.regMarks.tr, layout.regMarks.br, layout.regMarks.bl]) {
     ctx.fillRect(mark.x - REG_MARK_SIZE / 2, mark.y - REG_MARK_SIZE / 2, REG_MARK_SIZE, REG_MARK_SIZE);
   }
 
