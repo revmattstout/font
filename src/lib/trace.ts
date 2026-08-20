@@ -44,11 +44,22 @@ interface TraceData {
 // without contaminating the trace: darker-than-`inkLuminance` pixels are
 // always left alone, guide-gray pixels (and any scan/print artifacts near
 // them) are cleaned up.
+//
+// The band/border widths are generous on purpose: a real photo's guide
+// lines rarely land exactly where the ideal per-cell math says they
+// should, since the calibration is a 3-point affine fit to manually
+// clicked registration marks (a few pixels of click imprecision is
+// normal). Too narrow a band lets a sliver of guide line through, which
+// the adaptive threshold — far more sensitive to our light-gray guide
+// color than a flat global threshold was — picks up as ink, and the
+// gap-closing pass then thickens into a visible bar. Widening the band
+// costs nothing for real ink, which stays protected by the darkness check
+// regardless of how wide the scanned band is.
 export function maskGuideArtifacts(
   imageData: ImageData,
   guideLineFractions: number[],
-  borderPx = 4,
-  bandPx = 4,
+  borderPx = 10,
+  bandPx = 12,
   inkLuminance = 115
 ): void {
   const { width, height, data } = imageData;
@@ -86,8 +97,8 @@ export function maskGuideArtifacts(
 
   // The small reference label (glyph name) printed in the bottom-left
   // corner of every cell — same deal, whiten unless it's genuinely dark.
-  const labelY0 = Math.round(height * 0.88);
-  const labelX1 = Math.round(width * 0.55);
+  const labelY0 = Math.round(height * 0.84);
+  const labelX1 = Math.round(width * 0.6);
   for (let y = labelY0; y < height; y++) {
     for (let x = 0; x < labelX1; x++) maybeWhiten(x, y);
   }
