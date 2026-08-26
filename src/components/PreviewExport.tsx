@@ -6,14 +6,21 @@ const DEFAULT_PREVIEW_TEXT = "The quick brown fox jumps over the lazy dog. 01234
 const FAMILY_KEY = "__handwriting-preview-family";
 
 export default function PreviewExport() {
-  const { glyphs, capturedCount } = useGlyphStore();
-  const [familyName, setFamilyName] = useState("My Handwriting");
+  const { glyphs, capturedCount, activeProject } = useGlyphStore();
+  const [familyName, setFamilyName] = useState(activeProject.name);
   const [styleName, setStyleName] = useState("Regular");
   const [previewText, setPreviewText] = useState(DEFAULT_PREVIEW_TEXT);
   const [fontReady, setFontReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const activeFace = useRef<FontFace | null>(null);
   const previewFamily = useRef(`${FAMILY_KEY}-${Math.random().toString(36).slice(2)}`);
+
+  // Re-default the export name whenever the user switches fonts, so it
+  // doesn't silently keep a stale name from a previously active project.
+  useEffect(() => {
+    setFamilyName(activeProject.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject.id]);
 
   useEffect(() => {
     if (capturedCount === 0) {

@@ -51,6 +51,39 @@
   gap: 12px;
 }
 
+.project-switcher {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 12px;
+  border-right: 1px solid #e2e2e8;
+}
+
+.project-switcher select {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  max-width: 180px;
+  background: #fff;
+}
+
+.project-switcher button {
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
+  white-space: nowrap;
+}
+
+.project-switcher button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .main {
   flex: 1;
   padding: 24px;
